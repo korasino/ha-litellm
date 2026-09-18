@@ -22,7 +22,7 @@ jobs:
       CORE_REPO: korasino/core
       CORE_REF: ${{ inputs.core_ref || 'release/litellm' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Fetch LiteLLM integration from core
         run: |
