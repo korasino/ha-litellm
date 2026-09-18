@@ -43,7 +43,7 @@ jobs:
           path = Path("custom_components/litellm/manifest.json")
           manifest = json.loads(path.read_text())
           manifest["version"] = "2026.9.3-stt"
-          path.write_text(json.dumps(manifest, indent=2) + "\\n")
+          path.write_text(json.dumps(manifest, indent=2) + "\n")
           PY
 
       - name: Commit generated component
