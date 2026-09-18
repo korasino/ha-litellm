@@ -186,7 +186,7 @@ class LiteLLMSTTEntity(stt.SpeechToTextEntity, LiteLLMEntity):
                 extra_query={"intent": "transcription"},
                 max_retries=0,
             ) as connection:
-                transcription = {
+                transcription: dict[str, str | list[str]] = {
                     "model": self.model,
                     "language": metadata.language.split("-")[0],
                 }
