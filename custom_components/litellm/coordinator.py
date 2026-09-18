@@ -83,7 +83,7 @@ class LiteLLMDataUpdateCoordinator(DataUpdateCoordinator[None]):
             ),
             api_key=config_entry.data.get(CONF_API_KEY) or PLACEHOLDER_API_KEY,
             # Legacy HTTPX clients are supported at runtime only.
-            http_client=cast(Any, get_async_client(hass)),
+        http_client=cast(Any, get_async_client(hass)),
         )
 
     @override
