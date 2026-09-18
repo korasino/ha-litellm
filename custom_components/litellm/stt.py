@@ -55,8 +55,11 @@ async def async_setup_entry(
     model_groups = await async_get_model_groups(
         hass, config_entry.data[CONF_URL], config_entry.data.get(CONF_API_KEY)
     )
-    endpoints_by_model = {
-        model["model_group"]: model.get("supported_endpoints") or []
+    capabilities_by_model = {
+        model["model_group"]: (
+            model.get("supported_endpoints") or [],
+            model.get("supported_openai_params") or [],
+        )
         for model in model_groups
         if model.get("mode") == "audio_transcription"
     }
@@ -67,7 +70,7 @@ async def async_setup_entry(
                 LiteLLMSTTEntity(
                     config_entry,
                     subentry,
-                    endpoints_by_model.get(subentry.data[CONF_MODEL], []),
+                    *capabilities_by_model.get(subentry.data[CONF_MODEL], ([], [])),
                 )
             ],
             config_subentry_id=subentry.subentry_id,
@@ -82,10 +85,12 @@ class LiteLLMSTTEntity(stt.SpeechToTextEntity, LiteLLMEntity):
         entry: LiteLLMConfigEntry,
         subentry: ConfigSubentry,
         supported_endpoints: list[str],
+        supported_openai_params: list[str],
     ) -> None:
         """Initialize the STT entity."""
         super().__init__(entry, subentry)
         self._supported_endpoints = supported_endpoints
+        self._supports_keywords = "keywords" in supported_openai_params
 
     @property
     @override
@@ -155,7 +160,11 @@ class LiteLLMSTTEntity(stt.SpeechToTextEntity, LiteLLMEntity):
                 file=("audio.wav", wav_buffer.getvalue()),
                 response_format="json",
                 language=metadata.language.split("-")[0],
-                keywords=_get_vocabulary(self.entry.runtime_data.hass),
+                **(
+                    {"keywords": _get_vocabulary(self.entry.runtime_data.hass)}
+                    if self._supports_keywords
+                    else {}
+                ),
             )
         except OpenAIError:
             LOGGER.exception("Error during STT")
@@ -174,30 +183,30 @@ class LiteLLMSTTEntity(stt.SpeechToTextEntity, LiteLLMEntity):
         try:
             async with self.entry.runtime_data.client.realtime.connect(
                 model=self.model,
+                extra_query={"intent": "transcription"},
                 max_retries=0,
             ) as connection:
-                await connection.send(
-                    {
-                        "type": "session.update",
-                        "session": {
-                            "type": "transcription",
-                            "audio": {
-                                "input": {
-                                    "format": {
-                                        "type": "audio/pcm",
-                                        "rate": 16000,
-                                        "channels": 1,
-                                    },
-                                    "transcription": {
-                                        "model": self.model,
-                                        "language": metadata.language.split("-")[0],
-                                        "keywords": _get_vocabulary(
-                                            self.entry.runtime_data.hass
-                                        ),
-                                    },
-                                    "turn_detection": None,
-                                }
-                            },
+                transcription = {
+                    "model": self.model,
+                    "language": metadata.language.split("-")[0],
+                }
+                if self._supports_keywords:
+                    transcription["keywords"] = _get_vocabulary(
+                        self.entry.runtime_data.hass
+                    )
+                await connection.session.update(
+                    session={
+                        "type": "transcription",
+                        "audio": {
+                            "input": {
+                                "format": {
+                                    "type": "audio/pcm",
+                                    "rate": 16000,
+                                    "channels": 1,
+                                },
+                                "transcription": transcription,
+                                "turn_detection": None,
+                            }
                         },
                     }
                 )
