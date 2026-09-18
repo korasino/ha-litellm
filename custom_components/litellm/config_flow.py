@@ -4,7 +4,7 @@ import logging
 from typing import Any, cast, override
 
 from openai import AsyncOpenAI, AuthenticationError, OpenAIError, PermissionDeniedError
-import probatio
+import voluptuous as vol
 from yarl import URL
 
 from homeassistant.config_entries import (
@@ -128,10 +128,10 @@ class LiteLLMConfigFlow(ConfigFlow, domain=DOMAIN):
                 )
         return self.async_show_form(
             step_id="user",
-            data_schema=probatio.Schema(
+            data_schema=vol.Schema(
                 {
-                    probatio.Required(CONF_URL): str,
-                    probatio.Optional(CONF_API_KEY): str,
+                    vol.Required(CONF_URL): str,
+                    vol.Optional(CONF_API_KEY): str,
                 }
             ),
             errors=errors,
@@ -151,6 +151,7 @@ class LiteLLMSubentryFlowHandler(ConfigSubentryFlow):
         self.models = await _get_models(
             self.hass, entry.data[CONF_URL], entry.data.get(CONF_API_KEY)
         )
+
 
 
 class STTFlowHandler(ConfigSubentryFlow):
@@ -219,9 +220,9 @@ class STTFlowHandler(ConfigSubentryFlow):
         )
         return self.async_show_form(
             step_id="init",
-            data_schema=probatio.Schema(
+            data_schema=vol.Schema(
                 {
-                    probatio.Required(CONF_MODEL, default=default_model): SelectSelector(
+                    vol.Required(CONF_MODEL, default=default_model): SelectSelector(
                         SelectSelectorConfig(
                             options=[
                                 SelectOptionDict(value=model, label=model)
@@ -312,16 +313,16 @@ class ConversationFlowHandler(LiteLLMSubentryFlowHandler):
 
         return self.async_show_form(
             step_id="init",
-            data_schema=probatio.Schema(
+            data_schema=vol.Schema(
                 {
-                    probatio.Required(
+                    vol.Required(
                         CONF_MODEL, default=self.options.get(CONF_MODEL)
                     ): SelectSelector(
                         SelectSelectorConfig(
                             options=options, mode=SelectSelectorMode.DROPDOWN, sort=True
                         ),
                     ),
-                    probatio.Optional(
+                    vol.Optional(
                         CONF_PROMPT,
                         description={
                             "suggested_value": self.options.get(
@@ -330,7 +331,7 @@ class ConversationFlowHandler(LiteLLMSubentryFlowHandler):
                             )
                         },
                     ): TemplateSelector(),
-                    probatio.Optional(
+                    vol.Optional(
                         CONF_LLM_HASS_API,
                         default=self.options.get(
                             CONF_LLM_HASS_API,

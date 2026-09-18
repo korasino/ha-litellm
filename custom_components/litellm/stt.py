@@ -10,6 +10,8 @@ from openai import OpenAIError
 from websockets.exceptions import WebSocketException
 
 from homeassistant.components import stt
+from homeassistant.components.conversation.const import DOMAIN as CONVERSATION_DOMAIN
+from homeassistant.components.homeassistant.llm import async_get_exposed_entities
 from homeassistant.config_entries import ConfigSubentry
 from homeassistant.const import CONF_API_KEY, CONF_MODEL, CONF_URL
 from homeassistant.core import HomeAssistant
@@ -18,6 +20,22 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from .const import LOGGER, STT_BATCH_ENDPOINT, STT_REALTIME_ENDPOINT
 from .coordinator import LiteLLMConfigEntry, async_get_model_groups
 from .entity import LiteLLMEntity
+
+
+def _get_vocabulary(hass: HomeAssistant) -> list[str]:
+    """Return names and areas exposed to Assist as STT keywords."""
+    exposed_entities = async_get_exposed_entities(
+        hass, CONVERSATION_DOMAIN, include_state=False
+    )
+    vocabulary: dict[str, None] = {}
+    for info in exposed_entities.values():
+        for key in ("names", "areas"):
+            value = info.get(key)
+            if isinstance(value, str):
+                for term in value.split(", "):
+                    if term:
+                        vocabulary.setdefault(term, None)
+    return list(vocabulary)
 
 
 async def async_setup_entry(
@@ -132,13 +150,12 @@ class LiteLLMSTTEntity(stt.SpeechToTextEntity, LiteLLMEntity):
             wav_file.writeframes(audio_bytes)
 
         try:
-            response = await self.entry.runtime_data.client.with_options(
-                max_retries=0
-            ).audio.transcriptions.create(
+            response = await self.entry.runtime_data.client.audio.transcriptions.create(
                 model=self.model,
                 file=("audio.wav", wav_buffer.getvalue()),
                 response_format="json",
                 language=metadata.language.split("-")[0],
+                keywords=_get_vocabulary(self.entry.runtime_data.hass),
             )
         except OpenAIError:
             LOGGER.exception("Error during STT")
@@ -156,7 +173,8 @@ class LiteLLMSTTEntity(stt.SpeechToTextEntity, LiteLLMEntity):
         """Stream audio to LiteLLM's realtime transcription endpoint."""
         try:
             async with self.entry.runtime_data.client.realtime.connect(
-                model=self.model, extra_query={"intent": "transcription"}
+                model=self.model,
+                max_retries=0,
             ) as connection:
                 await connection.send(
                     {
@@ -173,7 +191,11 @@ class LiteLLMSTTEntity(stt.SpeechToTextEntity, LiteLLMEntity):
                                     "transcription": {
                                         "model": self.model,
                                         "language": metadata.language.split("-")[0],
+                                        "keywords": _get_vocabulary(
+                                            self.entry.runtime_data.hass
+                                        ),
                                     },
+                                    "turn_detection": None,
                                 }
                             },
                         },
