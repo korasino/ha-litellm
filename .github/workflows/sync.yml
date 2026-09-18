@@ -21,6 +21,7 @@ jobs:
     env:
       CORE_REPO: korasino/core
       CORE_REF: ${{ inputs.core_ref || 'release/litellm' }}
+      HACS_VERSION_BASE: 2026.9.3-stt
     steps:
       - uses: actions/checkout@v5
 
@@ -38,11 +39,14 @@ jobs:
         run: |
           python - <<'PY'
           import json
+          import os
           from pathlib import Path
 
           path = Path("custom_components/litellm/manifest.json")
           manifest = json.loads(path.read_text())
-          manifest["version"] = "2026.9.3-stt"
+          manifest["version"] = (
+              f"{os.environ['HACS_VERSION_BASE']}.{os.environ['GITHUB_RUN_NUMBER']}"
+          )
           path.write_text(json.dumps(manifest, indent=2) + "\n")
           PY
 
