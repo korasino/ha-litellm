@@ -1,43 +1,59 @@
-name: Sync LiteLLM custom component
+name: Build LiteLLM custom component
 
 on:
   workflow_dispatch:
     inputs:
       core_ref:
-        description: Core branch, tag, or commit containing the packaged component
+        description: Core release branch, tag, or commit
         required: false
-        default: hacs/litellm-stt-2026.9.3
-  schedule:
-    - cron: "17 * * * *"
+        default: release/litellm
 
 permissions:
   contents: write
 
 concurrency:
-  group: sync-litellm-component
+  group: build-litellm-component
   cancel-in-progress: true
 
 jobs:
-  sync:
+  build:
     runs-on: ubuntu-latest
     env:
       CORE_REPO: korasino/core
-      CORE_REF: ${{ inputs.core_ref || 'hacs/litellm-stt-2026.9.3' }}
+      CORE_REF: ${{ inputs.core_ref || 'release/litellm' }}
     steps:
       - uses: actions/checkout@v4
-      - name: Fetch packaged component
+
+      - name: Fetch LiteLLM integration from core
         run: |
+          tmp="$(mktemp -d)"
+          curl -fsSL "https://github.com/${CORE_REPO}/archive/${CORE_REF}.tar.gz" | tar -xz -C "$tmp"
+          source_dir="$(find "$tmp" -type d -path '*/homeassistant/components/litellm' -print -quit)"
+          test -n "$source_dir"
           rm -rf custom_components/litellm
           mkdir -p custom_components
-          curl -fsSL "https://github.com/${CORE_REPO}/archive/${CORE_REF}.tar.gz" \
-            | tar -xz --strip-components=2 -C custom_components --wildcards "*/custom_components/litellm"
-      - name: Commit changes
+          cp -a "$source_dir" custom_components/litellm
+
+      - name: Add HACS version to manifest
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          path = Path("custom_components/litellm/manifest.json")
+          manifest = json.loads(path.read_text())
+          manifest["version"] = "2026.9.3-stt"
+          path.write_text(json.dumps(manifest, indent=2) + "\\n")
+          PY
+
+      - name: Commit generated component
         run: |
           git add custom_components/litellm
           if git diff --cached --quiet; then
+            echo "Component is already up to date"
             exit 0
           fi
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git commit -m "chore: sync LiteLLM component from ${CORE_REF}"
+          git commit -m "chore: build LiteLLM component from ${CORE_REF}"
           git push
