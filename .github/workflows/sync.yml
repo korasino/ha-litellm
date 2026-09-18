@@ -1,0 +1,43 @@
+name: Sync LiteLLM custom component
+
+on:
+  workflow_dispatch:
+    inputs:
+      core_ref:
+        description: Core branch, tag, or commit containing the packaged component
+        required: false
+        default: hacs/litellm-stt-2026.9.3
+  schedule:
+    - cron: "17 * * * *"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sync-litellm-component
+  cancel-in-progress: true
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    env:
+      CORE_REPO: korasino/core
+      CORE_REF: ${{ inputs.core_ref || 'hacs/litellm-stt-2026.9.3' }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch packaged component
+        run: |
+          rm -rf custom_components/litellm
+          mkdir -p custom_components
+          curl -fsSL "https://github.com/${CORE_REPO}/archive/${CORE_REF}.tar.gz" \
+            | tar -xz --strip-components=2 -C custom_components --wildcards "*/custom_components/litellm"
+      - name: Commit changes
+        run: |
+          git add custom_components/litellm
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git commit -m "chore: sync LiteLLM component from ${CORE_REF}"
+          git push
