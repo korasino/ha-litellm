@@ -19,5 +19,5 @@
   "requirements": [
     "openai[realtime]==3.15.0"
   ],
-  "version": "2026.9.3-stt"
+  "version": "2026.9.3-stt.4"
 }
